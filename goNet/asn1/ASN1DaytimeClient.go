@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/asn1"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"time"
 )
 
 func main() {
@@ -16,11 +18,13 @@ func main() {
 	service := os.Args[1]
 	conn, err := net.Dial("tcp", service)
 	checkError(err)
-	_, err = conn.Write([]byte("HEAD / HTTP/1.0\r\n\r\n"))
-	checkError(err)
 	result, err := readFully(conn)
 	checkError(err)
-	fmt.Println(string(result))
+
+	var newtime time.Time
+	_, err1 := asn1.Unmarshal(result, &newtime)
+	checkError(err1)
+	fmt.Println(newtime.String())
 	os.Exit(0)
 }
 
