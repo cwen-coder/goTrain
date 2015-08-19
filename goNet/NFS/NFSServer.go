@@ -1,0 +1,124 @@
+package main
+
+import (
+	"fmt"
+	"net"
+	"os"
+	"strings"
+)
+
+const (
+	DIR   = "DIR"
+	CD    = "CD"
+	PWD   = "PWD"
+	LOGIN = "LOGIN"
+	FILE  = "file_transfer"
+)
+
+func main() {
+	service := ":1201"
+	tcpAddr, err := net.ResolveTCPAddr("tcp", service)
+	checkError(err)
+
+	listener, err := net.ListenTCP("tcp", tcpAddr)
+	checkError(err)
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+		go handleClient(conn)
+	}
+}
+
+func handleClient(conn net.Conn) {
+	defer conn.Close()
+
+	var state string = LOGIN
+	var buf [512]byte
+	for {
+		n, err := conn.Read(buf[0:])
+		if err != nil {
+			conn.Close()
+			return
+		}
+		s := string(buf[0:n])
+		switch state {
+		case LOGIN:
+			if len(s) < 5 || s[0:5] != LOGIN {
+				conn.Write([]byte("NO"))
+				state = LOGIN
+			} else {
+				tokens := strings.Split(s, " ")
+				if len(tokens) == 3 && tokens[1] == "cwen" && tokens[2] == "cwen" {
+					conn.Write([]byte("OK"))
+					state = FILE
+				} else {
+					conn.Write([]byte("Failed"))
+					state = LOGIN
+				}
+			}
+		case FILE:
+			if s[0:2] == CD {
+				chdir(conn, s[3:])
+			} else if s[0:3] == DIR {
+				dirList(conn)
+			} else if s[0:3] == PWD {
+				pwd(conn)
+			}
+		}
+
+		//s := string(buf[0:n])
+
+		//if s[0:2] == CD {
+		//	chdir(conn, s[3:])
+		//} else if s[0:3] == DIR {
+		//	dirList(conn)
+		//} else if s[0:3] == PWD {
+		//	pwd(conn)
+		//}
+	}
+}
+
+func chdir(conn net.Conn, s string) {
+	if os.Chdir(s) == nil {
+		conn.Write([]byte("OK"))
+	} else {
+		conn.Write([]byte("ERROR"))
+	}
+}
+
+func pwd(conn net.Conn) {
+	s, err := os.Getwd()
+	if err != nil {
+		conn.Write([]byte(""))
+		return
+	}
+	conn.Write([]byte(s))
+}
+
+func dirList(conn net.Conn) {
+	defer conn.Write([]byte("\r\n"))
+
+	dir, err := os.Open(".")
+	if err != nil {
+		return
+	}
+
+	names, err := dir.Readdirnames(-1) //读目录下所有名字
+	if err != nil {
+		return
+	}
+
+	for _, nm := range names {
+		conn.Write([]byte(nm + "\r\n"))
+	}
+}
+
+func checkError(err error) {
+	if err != nil {
+		fmt.Println("Fatal error", err.Error())
+		os.Exit(1)
+	}
+}
